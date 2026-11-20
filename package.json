@@ -1,0 +1,14 @@
+{
+  "name": "memeforge",
+  "version": "1.17.0",
+  "private": true,
+  "description": "MemeForge token creator with SQL-backed fees, admin dashboard, logo upload and database manager, one-step payment (fee and token in one transaction), IPFS hosting, site modes (mainnet, devnet, dry run, maintenance), seasonal themes, special offers fee-received e-mail alerts, an underpaid flag, hosting limits and a daily token cap",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test \"test/*.test.js\""
+  },
+  "engines": {
+    "node": ">=22.13"
+  }
+}
