@@ -594,6 +594,10 @@
   .done-links{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}
   .done-links .btn{min-height:48px;padding:0 14px;font-size:14.5px}
   .done-chips{display:flex;flex-wrap:wrap;gap:8px}
+  .sup-presets{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+  .sup-presets button{font:inherit;font-size:12.5px;font-weight:700;padding:6px 14px;border-radius:999px;cursor:pointer;color:var(--muted);background:transparent;border:1px solid rgba(139,77,255,.4);transition:background .15s,color .15s,border-color .15s}
+  .sup-presets button:hover{border-color:rgba(139,77,255,.8);color:inherit}
+  .sup-presets button.on{background:rgba(139,77,255,.22);border-color:rgba(139,77,255,.8);color:inherit}
   .chip{display:inline-flex;align-items:center;gap:6px;padding:6px 12px 6px 9px;border-radius:999px;font-size:12.5px;font-weight:600;background:rgba(139,77,255,.18);border:1px solid rgba(139,77,255,.5)}
   .chip svg{width:14px;height:14px;stroke-width:2.8;color:var(--lime)}
   .done-none{font-size:13px;color:var(--muted)}
@@ -673,7 +677,13 @@
     </div>
     <div class="grid" style="margin-bottom:14px">
       <div class="field"><label class="lbl" for="decimals">Decimals</label><input id="decimals" type="number" inputmode="numeric" min="0" max="9" value="9"></div>
-      <div class="field"><label class="lbl" for="supply">Initial supply</label><input id="supply" type="number" inputmode="numeric" min="0" value="1000000"></div>
+      <div class="field"><label class="lbl" for="supply">Initial supply</label><input id="supply" type="text" inputmode="numeric" autocomplete="off" maxlength="26" value="1,000,000,000">
+        <div class="sup-presets" id="supPresets" role="group" aria-label="Supply presets">
+          <button type="button" data-v="100000">100K</button>
+          <button type="button" data-v="500000">500K</button>
+          <button type="button" data-v="1000000">1M</button>
+          <button type="button" data-v="1000000000">1B</button>
+        </div></div>
     </div>
 
     <div class="field">
@@ -1432,7 +1442,9 @@ if (!P) throw new Error('payment.js was not found. Put it in the same folder as 
 const { CFG, FEE_WALLET, BASE_FEE, FEATURES, money, validFeeWallet, activeFeatures } = P;
 const feeFeatureCount = () => activeFeatures().length;
 // Token account rent is only needed when there is an initial supply, so tell payment.js.
-const hasSupplyNow = () => /^\d+$/.test(($('supply').value || '0').trim()) && BigInt(($('supply').value || '0').trim()) > 0n;
+// The supply box shows commas (1,000,000,000); everything else works on the plain digits.
+const supplyDigits = () => ($('supply').value || '').replace(/[,\s]/g, '') || '0';
+const hasSupplyNow = () => /^\d+$/.test(supplyDigits()) && BigInt(supplyDigits()) > 0n;
 function computeFees() { return P.computeFees(hasSupplyNow()); }
 // Fetch exact rent numbers from the RPC, then redraw the receipt if they changed.
 // If the RPC does not answer, the receipt shows an estimate: keep asking every few seconds until the real numbers arrive.
@@ -1495,7 +1507,29 @@ function renderReceipt() {
   else warn.style.display = 'none';
 }
 FEATURES.forEach(ft => $(ft.id).addEventListener('change', renderReceipt));
-$('supply').addEventListener('input', renderReceipt);
+// Auto-format with commas while typing, keeping the caret next to the same digit.
+function markSupplyPreset() {
+  const d = supplyDigits();
+  document.querySelectorAll('#supPresets button').forEach(b => b.classList.toggle('on', b.dataset.v === d));
+}
+$('supply').addEventListener('input', () => {
+  const el = $('supply');
+  const digitsBeforeCaret = (el.value.slice(0, el.selectionStart).match(/\d/g) || []).length;
+  const digits = el.value.replace(/\D/g, '').replace(/^0+(?=\d)/, '');
+  el.value = digits ? digits.replace(/\B(?=(\d{3})+(?!\d))/g, ',') : '';
+  let pos = 0, seen = 0;
+  while (pos < el.value.length && seen < digitsBeforeCaret) { if (/\d/.test(el.value[pos])) seen++; pos++; }
+  try { el.setSelectionRange(pos, pos); } catch (e) {}
+  markSupplyPreset();
+  renderReceipt();
+});
+$('supply').addEventListener('blur', () => { if (!$('supply').value) { $('supply').value = '0'; markSupplyPreset(); renderReceipt(); } });
+$('supPresets').addEventListener('click', e => {
+  const b = e.target.closest('button[data-v]'); if (!b) return;
+  $('supply').value = b.dataset.v.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  markSupplyPreset(); renderReceipt();
+});
+markSupplyPreset();
 renderReceipt();
 refineRent();
 $('rpc').addEventListener('change', () => { P.resetRent(); refineTries = 0; refineRent(); });
@@ -1771,7 +1805,7 @@ $('createBtn').onclick = async () => {
     if (utf8len(uri) > 200) throw new Error('Metadata URI must be 200 bytes or fewer');
 
     const decimals = Math.max(0, Math.min(9, parseInt($('decimals').value || '9', 10) || 0));
-    const supplyStr = ($('supply').value || '0').trim();
+    const supplyStr = supplyDigits();
     if (!/^\d+$/.test(supplyStr)) throw new Error('Initial supply must be a whole number');
     const supplyRaw = BigInt(supplyStr) * (10n ** BigInt(decimals));
     if (supplyRaw > 18446744073709551615n) throw new Error('Supply is too large for a u64 — lower the supply or decimals');
